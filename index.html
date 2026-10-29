@@ -49,6 +49,16 @@
   .alerta{flex:none;border:1px solid var(--borde);background:#fff;border-radius:9px;width:38px;height:34px;font-size:17px}
   .item.inc{background:var(--naranjaFondo)}
   .item.inc .alerta{border-color:var(--naranja);background:var(--naranja)}
+  .fotoBox{padding:0 14px 12px 54px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .btnFoto{border:1px dashed var(--verde);background:#eef9f7;color:var(--verde);border-radius:10px;padding:9px 12px;font-size:14px;font-weight:700}
+  .mini{position:relative;width:64px;height:64px;border-radius:10px;overflow:hidden;background:#e5e7eb}
+  .mini img{width:100%;height:100%;object-fit:cover;display:block}
+  .mini .x{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:0;background:#000a;color:#fff;font-size:13px;line-height:22px;padding:0}
+  .mini .est{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#fffc;font-size:11px;font-weight:700;color:var(--verde);text-align:center}
+  .mini.error .est{color:#b91c1c}
+  .galeria{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .galeria a{display:block;width:72px;height:72px;border-radius:8px;overflow:hidden;background:#e5e7eb}
+  .galeria img{width:100%;height:100%;object-fit:cover}
   .incBox{display:none;padding:0 14px 12px 54px}
   .item.verInc .incBox{display:block}
   .incBox textarea{border-color:#fdba74;min-height:50px}
@@ -123,7 +133,8 @@
   <div class="card pad">
     <div style="font-weight:700;font-size:17px">⚠️ Observaciones</div>
     <label class="campo">Desperfectos encontrados</label>
-    <textarea id="obsDesperfectos" oninput="guardarBorrador()"></textarea>
+    <textarea id="obsDesperfectos" oninput="guardarBorrador()" placeholder="Describe el desperfecto y añade fotos si hace falta"></textarea>
+    <div class="fotoBox" id="fb_obs_desp" style="padding:8px 0 0"></div>
     <label class="campo">Productos que faltan</label>
     <textarea id="obsProductos" oninput="guardarBorrador()"></textarea>
     <label class="campo">Objetos olvidados por huéspedes</label>
@@ -214,7 +225,7 @@ const CHECKLIST = [
   "No quedan objetos de huéspedes anteriores.","No hay olores desagradables.","Todas las luces funcionan.","Ventanas cerradas.",
   "Aire acondicionado apagado.","Basura retirada del departamento y depositada en contenedores.",
   "Puerta y cerradura funcionando correctamente.","Departamento listo para recibir huéspedes."]},
- {id:"foto", ico:"📸", t:"9. Fotos obligatorias al finalizar", nota:"Enviar las fotos por WhatsApp al finalizar la limpieza.", items:[
+ {id:"foto", ico:"📸", t:"9. Fotos obligatorias al finalizar", fotos:true, nota:"Toca 📷 para sacar la foto o elegirla de la galería. Se guardan solas en el historial.", items:[
   "Foto general del dormitorio con cama preparada.","Foto del baño completo.","Foto de la cocina y mesada.",
   "Foto del interior del horno limpio.","Foto del salón y comedor.","Foto de la entrada del departamento.",
   "Foto de cualquier daño, desperfecto o anomalía."]}
@@ -226,7 +237,7 @@ let st = nuevoEstado();
 let historial = [];
 
 function nuevoEstado(){
-  return {hechos:{}, inc:{}, profunda:false, final:"", inicio:new Date().toISOString(),
+  return {id:"L"+Date.now(), hechos:{}, inc:{}, fotos:{}, profunda:false, final:"", inicio:new Date().toISOString(),
           fecha:hoy(), responsable:"", otro:"", obs:{d:"",p:"",o:"",c:""}};
 }
 function hoy(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
@@ -254,12 +265,15 @@ function pintar(){
       html += `<div class="item ${st.hechos[k]?"hecho":""} ${inc?"inc":""}" id="it_${k}">
         <div class="itemRow"><div class="chk" onclick="toggleItem('${k}')">✓</div><div class="txt" onclick="toggleItem('${k}')">${it}</div>
         <button class="alerta" onclick="toggleInc('${k}')" title="Anotar incidencia">⚠️</button></div>
-        <div class="incBox"><textarea placeholder="Describe la incidencia…" oninput="setInc('${k}',this.value)">${esc(inc)}</textarea></div></div>`;
+        <div class="incBox"><textarea placeholder="Describe la incidencia…" oninput="setInc('${k}',this.value)">${esc(inc)}</textarea></div>
+        ${sec.fotos?`<div class="fotoBox" id="fb_${k}"></div>`:""}</div>`;
     });
     html += `<button class="btnTodo" onclick="marcarTodo('${sec.id}')">Marcar toda la sección</button></div>`;
     div.innerHTML = html;
     cont.appendChild(div);
+    if(sec.fotos) itemsDe(sec).forEach((_,i)=>pintarFotos(key(sec.id,i)));
   });
+  pintarFotos("obs_desp");
   actualizarContadores();
 }
 function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -292,6 +306,79 @@ function pintarManteniendoAbiertas(){
   const ab = [...document.querySelectorAll(".sec.abierta")].map(e=>e.id);
   pintar(); ab.forEach(id=>document.getElementById(id)?.classList.add("abierta"));
 }
+/* ====== FOTOS ====== */
+const vistaPrevia = {};           // uid -> dataURL (solo en memoria)
+let colaFotos = Promise.resolve(); // subidas de una en una
+let subiendo = 0;
+function thumbDrive(id,sz){return `https://drive.google.com/thumbnail?id=${id}&sz=w${sz||300}`;}
+function pintarFotos(k){
+  const box = document.getElementById("fb_"+k); if(!box) return;
+  const fs = st.fotos[k]||[];
+  box.innerHTML = fs.map(f=>{
+    const src = vistaPrevia[f.uid] || f.local || (f.fileId?thumbDrive(f.fileId,200):"");
+    const est = f.estado==="subiendo" ? "Subiendo…" : f.estado==="error" ? "Error<br>toca ↻" : "";
+    return `<div class="mini ${f.estado==="error"?"error":""}">${src?`<img src="${src}" alt="">`:""}
+      ${est?`<div class="est" ${f.estado==="error"?`onclick="reintentarFoto('${k}','${f.uid}')"`:""}>${est}</div>`:""}
+      <button class="x" onclick="quitarFoto('${k}','${f.uid}')">✕</button></div>`;
+  }).join("") + `<label class="btnFoto">📷 ${fs.length?"Otra":"Añadir foto"}<input type="file" accept="image/*" multiple hidden onchange="elegirFotos('${k}',this)"></label>`;
+}
+function elegirFotos(k,input){
+  const files=[...input.files]; input.value="";
+  files.forEach(file=>{
+    const f = {uid:"f"+Date.now()+Math.random().toString(36).slice(2,6), estado:"subiendo"};
+    (st.fotos[k] ||= []).push(f);
+    pintarFotos(k);
+    comprimir(file).then(dataURL=>{ vistaPrevia[f.uid]=dataURL; f.local=dataURL; pintarFotos(k); encolar(k,f); })
+      .catch(()=>{ f.estado="error"; pintarFotos(k); toast("No se pudo leer esa imagen"); });
+  });
+  if(files.length && k!=="obs_desp" && !st.hechos[k]) toggleItem(k);
+}
+function comprimir(file){
+  return new Promise((ok,ko)=>{
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = ()=>{
+      const max=1600, r=Math.min(1, max/Math.max(img.width,img.height));
+      const c=document.createElement("canvas"); c.width=Math.round(img.width*r); c.height=Math.round(img.height*r);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+      ok(c.toDataURL("image/jpeg",0.75));
+    };
+    img.onerror = ()=>{URL.revokeObjectURL(url); ko();};
+    img.src = url;
+  });
+}
+function textoItem(k){
+  if(k==="obs_desp") return "Desperfecto";
+  const [sid,i]=k.split("_"); const sec=CHECKLIST.find(s=>s.id===sid);
+  const t = itemsDe(sec)[+i].replace(/^Foto (general )?(del |de la |de )?/i,"").replace(/\.$/,"");
+  return t.charAt(0).toUpperCase()+t.slice(1);
+}
+function encolar(k,f){
+  subiendo++; f.estado="subiendo"; pintarFotos(k);
+  colaFotos = colaFotos.then(()=>subirFoto(k,f)).finally(()=>{subiendo--; guardarBorrador();});
+}
+async function subirFoto(k,f){
+  if(!SCRIPT_URL){ f.estado="ok"; pintarFotos(k); return; } // modo prueba: queda en el teléfono
+  try{
+    const r = await fetch(SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({accion:"foto", limpiezaId:st.id, nombre:textoItem(k), data:f.local.split(",")[1]})});
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error);
+    f.fileId=j.fileId; f.estado="ok"; delete f.local;
+  }catch(e){ f.estado="error"; }
+  pintarFotos(k);
+}
+function reintentarFoto(k,uid){ const f=(st.fotos[k]||[]).find(x=>x.uid===uid); if(f&&f.local) encolar(k,f); }
+function quitarFoto(k,uid){
+  const fs=st.fotos[k]||[], f=fs.find(x=>x.uid===uid); if(!f) return;
+  if(f.estado==="subiendo") return toast("Espera a que termine de subir");
+  st.fotos[k]=fs.filter(x=>x.uid!==uid);
+  if(f.fileId && SCRIPT_URL) fetch(SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({accion:"borrarFoto",fileId:f.fileId})}).catch(()=>{});
+  pintarFotos(k); guardarBorrador();
+}
+function todasLasFotos(){
+  const out=[]; Object.entries(st.fotos).forEach(([k,fs])=>fs.forEach(f=>out.push({k,f}))); return out;
+}
+
 function setProfunda(v){st.profunda=v; actualizarContadores(); guardarBorrador();}
 function setFinal(v){
   st.final = st.final===v ? "" : v;
@@ -352,7 +439,14 @@ function guardarBorrador(){
   st.otro = document.getElementById("otroNombre").value;
   st.fecha = document.getElementById("fecha").value;
   st.obs = {d:val("obsDesperfectos"), p:val("obsProductos"), o:val("obsObjetos"), c:val("obsOtros")};
-  clearTimeout(tBorr); tBorr = setTimeout(()=>ls(LS_BORRADOR, st), 300);
+  clearTimeout(tBorr); tBorr = setTimeout(guardarLocal, 300);
+}
+function guardarLocal(){
+  // en el borrador solo se guarda la imagen de las fotos que aún no se subieron
+  const copia = JSON.parse(JSON.stringify(st));
+  Object.values(copia.fotos||{}).forEach(fs=>fs.forEach(f=>{ if(f.estado==="ok" && SCRIPT_URL) delete f.local; }));
+  try{ localStorage.setItem(LS_BORRADOR, JSON.stringify(copia)); }
+  catch(e){ Object.values(copia.fotos||{}).forEach(fs=>fs.forEach(f=>delete f.local)); ls(LS_BORRADOR, copia); }
 }
 function val(id){return document.getElementById(id).value;}
 
@@ -372,7 +466,7 @@ function construirRegistro(){
   });
   const ahora = new Date();
   return {
-    id: "L"+ahora.getTime(),
+    id: st.id,
     fecha: st.fecha,
     horaInicio: new Date(st.inicio).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}),
     horaFin: ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}),
@@ -384,6 +478,9 @@ function construirRegistro(){
     pendientes: pendientes.join("\n"),
     incidencias: incidencias.join("\n"),
     desperfectos: st.obs.d.trim(), productos: st.obs.p.trim(), objetos: st.obs.o.trim(), comentarios: st.obs.c.trim(),
+    fotos: todasLasFotos().filter(x=>x.f.estado==="ok" && x.f.fileId).map(x=>textoItem(x.k)+"|"+x.f.fileId).join("\n"),
+    fotosLocal: SCRIPT_URL ? undefined : todasLasFotos().map(x=>({n:textoItem(x.k), src:x.f.local})),
+    nFotos: todasLasFotos().filter(x=>x.f.estado==="ok").length,
     guardado: ahora.toISOString()
   };
 }
@@ -391,16 +488,19 @@ function pedirGuardar(){
   guardarBorrador();
   if(!st.responsable || (st.responsable==="Otra" && !st.otro.trim())) return toast("Elige quién hace la limpieza");
   if(!st.final) return toast("Marca abajo si la limpieza quedó finalizada (SÍ / NO)");
+  if(subiendo>0) return toast(`Espera: todavía se están subiendo ${subiendo} foto${subiendo>1?"s":""}`);
   const {total,hechos} = contar();
   const faltan = total-hechos;
-  modal("¿Guardar la limpieza?",
-    faltan ? `Quedan ${faltan} tareas sin marcar. Se guardarán como pendientes.` : "Todas las tareas están marcadas. ¡Muy bien!",
-    guardar);
+  const fallidas = todasLasFotos().filter(x=>x.f.estado==="error").length;
+  let txt = faltan ? `Quedan ${faltan} tareas sin marcar. Se guardarán como pendientes.` : "Todas las tareas están marcadas. ¡Muy bien!";
+  if(fallidas) txt += ` Ojo: ${fallidas} foto${fallidas>1?"s no se pudieron":" no se pudo"} subir (toca la foto para reintentar, o mándala por WhatsApp).`;
+  modal("¿Guardar la limpieza?", txt, guardar);
 }
 async function guardar(){
   const reg = construirRegistro();
   const b = document.getElementById("btnGuardar"); b.disabled=true; b.textContent="Guardando…";
   const ok = await enviar(reg);
+  if(ok && ok.carpetaUrl) reg.carpetaFotos = ok.carpetaUrl;
   b.disabled=false; b.textContent="Guardar limpieza";
   if(!ok){
     const p = ls(LS_PEND)||[]; p.push(reg); ls(LS_PEND,p);
@@ -413,7 +513,7 @@ async function enviar(reg){
   if(!SCRIPT_URL){ const h=ls(LS_DEMO)||[]; h.unshift(reg); ls(LS_DEMO,h); return true; }
   try{
     const r = await fetch(SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({accion:"guardar",registro:reg})});
-    const j = await r.json(); return j.ok===true;
+    const j = await r.json(); return j.ok===true ? j : false;
   }catch(e){ return false; }
 }
 async function enviarPendientes(){
@@ -425,7 +525,7 @@ async function enviarPendientes(){
 }
 function ofrecerWhatsApp(reg){
   setTimeout(()=>modal("Enviar resumen por WhatsApp",
-    "Abre WhatsApp con el resumen de la limpieza. Después envía las fotos en el mismo chat.",
+    "Abre WhatsApp con el resumen de la limpieza para avisar que terminaste.",
     ()=>{ location.href = "https://wa.me/?text="+encodeURIComponent(textoResumen(reg)); }, "Abrir WhatsApp"), 600);
 }
 function textoResumen(r){
@@ -435,11 +535,13 @@ function textoResumen(r){
   if(r.productos) t += `\n🧴 Faltan: ${r.productos}`;
   if(r.objetos) t += `\n🎒 Objetos olvidados: ${r.objetos}`;
   if(r.comentarios) t += `\n💬 ${r.comentarios}`;
+  if(r.nFotos) t += `\n\n📸 ${r.nFotos} foto${r.nFotos>1?"s":""} subida${r.nFotos>1?"s":""}${r.carpetaFotos?": "+r.carpetaFotos:""}`;
   if(r.pendientes) t += `\n\n⏳ *Sin hacer:*\n• `+r.pendientes.split("\n").join("\n• ");
   return t;
 }
 function pedirReinicio(){
   modal("¿Vaciar el checklist?","Se borra lo marcado y lo escrito en esta limpieza (el historial no se toca).",()=>{
+    if(SCRIPT_URL && todasLasFotos().some(x=>x.f.fileId)) fetch(SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({accion:"descartar",limpiezaId:st.id})}).catch(()=>{});
     st=nuevoEstado(); ls(LS_BORRADOR,st); cargarCampos(); pintar(); toast("Checklist vacío");
   });
 }
@@ -458,6 +560,11 @@ async function cargarHistorial(){
 }
 function fmtFecha(f){ if(!f) return ""; const [y,m,d]=String(f).slice(0,10).split("-"); return `${d}/${m}/${y}`; }
 function lista(txt){ return txt ? "<ul>"+String(txt).split("\n").filter(Boolean).map(l=>`<li>${esc(l)}</li>`).join("")+"</ul>" : ""; }
+function fotosDe(r){
+  if(r.fotosLocal) return r.fotosLocal.filter(f=>f.src).map(f=>({n:f.n, src:f.src, href:f.src}));
+  return String(r.fotos||"").split("\n").filter(l=>l.includes("|")).map(l=>{const [n,id]=l.split("|");
+    return {n, src:thumbDrive(id,300), href:`https://drive.google.com/file/d/${id}/view`};});
+}
 function pintarHistorial(){
   const f = document.getElementById("filtroResp").value;
   const regs = historial.filter(r=>!f || r.responsable===f);
@@ -473,7 +580,9 @@ function pintarHistorial(){
       ${nInc?`<span class="tag inc">⚠️ ${nInc} incidencia${nInc>1?"s":""}</span>`:""}
       ${hayObs?`<span class="tag inc">📝 Observaciones</span>`:""}
       ${r.profunda==="SÍ"?`<span class="tag prof">🧽 Profunda</span>`:""}
+      ${fotosDe(r).length?`<span class="tag prof">📸 ${fotosDe(r).length} fotos</span>`:""}
       <div class="detalle">
+        ${fotosDe(r).length?`<h4>Fotos</h4><div class="galeria">${fotosDe(r).map(f=>`<a href="${f.href}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(f.n)}"><img src="${f.src}" loading="lazy" alt="${esc(f.n)}"></a>`).join("")}</div>${r.carpetaFotos?`<div style="margin-top:6px"><a href="${esc(r.carpetaFotos)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📁 Abrir carpeta de fotos</a></div>`:""}`:""}
         ${nInc?`<h4>Incidencias</h4>${lista(r.incidencias)}`:""}
         ${r.desperfectos?`<h4>Desperfectos</h4>${esc(r.desperfectos)}`:""}
         ${r.productos?`<h4>Productos que faltan</h4>${esc(r.productos)}`:""}
@@ -509,7 +618,11 @@ function cerrarModal(){document.getElementById("modal").classList.remove("on");}
 
 /* ====== INICIO ====== */
 const b = ls(LS_BORRADOR);
-if(b && b.hechos){ st = Object.assign(nuevoEstado(), b); }
+if(b && b.hechos){
+  st = Object.assign(nuevoEstado(), b);
+  st.fotos = st.fotos||{};
+  Object.values(st.fotos).forEach(fs=>fs.forEach(f=>{ if(f.estado==="subiendo") f.estado = f.local ? "error" : "ok"; }));
+}
 if(!SCRIPT_URL) document.getElementById("avisoDemo").classList.remove("oculto");
 initCampos(); pintar();
 enviarPendientes();
