@@ -97,6 +97,31 @@
   .modal .fila .btn{flex:1}
   .oculto{display:none!important}
   .filtro{display:flex;gap:8px;margin-bottom:12px}
+  .btnProp{display:block;margin:22px auto 6px;background:none;border:0;color:var(--gris);font-size:14px;font-weight:600;padding:10px 16px}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .kpi{background:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+  .kpi .v{font-size:22px;font-weight:800;margin-top:2px}
+  .kpi .e{font-size:12px;color:var(--gris);font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+  .kpi .s{font-size:12px;color:var(--gris);margin-top:2px}
+  .kpi.ojo{background:#fff7ed}.kpi.ojo .v{color:var(--naranja)}
+  .kpi.bien .v{color:#047857}
+  .fila2{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--borde);font-size:15px}
+  .fila2:last-child{border-bottom:0}
+  .fila2 .izq{flex:1;min-width:0}
+  .fila2 .der{font-weight:700;white-space:nowrap}
+  .fila2 small{display:block;color:var(--gris);font-size:13px;margin-top:2px}
+  .num{display:inline-block;min-width:26px;text-align:center;font-weight:800;color:#fff;background:var(--naranja);border-radius:12px;padding:2px 7px;font-size:13px}
+  .num.gris{background:#94a3b8}
+  .pagoRow input{width:22px;height:22px;flex:none}
+  .totalPago{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#f0fdf4;font-weight:700}
+  .acciones{display:flex;gap:8px;padding:0 14px 14px;flex-wrap:wrap}
+  .acciones .btn{padding:11px;font-size:15px}
+  .btnMini{border:1px solid var(--verde);background:#fff;color:var(--verde);border-radius:18px;padding:5px 11px;font-size:13px;font-weight:700}
+  .tag.pag{background:#d1fae5;color:#047857}.tag.nopag{background:#fef3c7;color:#92400e}
+  .pinIn{font-size:28px!important;text-align:center;letter-spacing:.4em}
+  .chkLinea{display:flex;align-items:center;gap:8px;margin:12px 0 4px;font-size:15px;color:var(--gris)}
+  .chkLinea input{width:20px;height:20px}
+  .sinDatos{padding:14px;color:var(--gris);font-size:14px}
 </style>
 </head>
 <body>
@@ -104,10 +129,7 @@
 <header>
   <h1>🧹 Limpieza – Depto Tucumán</h1>
   <small id="subtit">Checklist Airbnb</small>
-  <div class="tabs">
-    <button id="tabCheck" class="on" onclick="verTab('check')">Checklist</button>
-    <button id="tabHist" onclick="verTab('hist')">Historial</button>
-  </div>
+  <div style="height:12px"></div>
   <div class="barra" id="barraWrap"><div id="barra"></div></div>
 </header>
 
@@ -149,14 +171,21 @@
     </div>
     <div class="importante"><b>IMPORTANTE:</b> El departamento debe quedar limpio, ordenado, sin olores y preparado como si fuera a recibir a su primer huésped.</div>
   </div>
+  <button class="btnProp" onclick="abrirPropietario()">🔒 Propietario</button>
 </main>
 
-<main id="vistaHist" class="oculto">
-  <div class="filtro">
-    <select id="filtroResp" onchange="pintarHistorial()"><option value="">Todas</option></select>
-    <button class="btn sec2" style="flex:none;padding:10px 14px" onclick="cargarHistorial()">↻ Actualizar</button>
+<main id="vistaProp" class="oculto">
+  <div class="card pad">
+    <div class="fila">
+      <div><label class="campo" style="margin-top:0">Periodo</label><select id="filtroPeriodo" onchange="pintarPanel()"></select></div>
+      <div><label class="campo" style="margin-top:0">Persona</label><select id="filtroResp" onchange="pintarPanel()"><option value="">Todas</option></select></div>
+    </div>
+    <div class="fila" style="margin-top:10px">
+      <button class="btn sec2" onclick="cargarPanel()">↻ Actualizar</button>
+      <button class="btn sec2" onclick="salirPropietario()">← Volver al checklist</button>
+    </div>
   </div>
-  <div class="card" id="listaHist"><div class="vacio">Cargando…</div></div>
+  <div id="panel"><div class="vacio">Cargando…</div></div>
 </main>
 
 <div class="pie" id="pie">
@@ -169,6 +198,13 @@
   <div class="fila"><button class="btn sec2" onclick="cerrarModal()">Cancelar</button><button class="btn" id="mOk">Aceptar</button></div>
 </div></div>
 
+<div class="modal" id="modalPin"><div class="caja">
+  <h3>🔒 Acceso del propietario</h3><p>Introduce tu PIN para ver el historial, los pagos y los informes.</p>
+  <input type="password" id="pinIn" class="pinIn" inputmode="numeric" autocomplete="off" placeholder="••••" onkeydown="if(event.key==='Enter')entrarPropietario()">
+  <label class="chkLinea"><input type="checkbox" id="pinRecordar"> Recordar en este teléfono</label>
+  <div class="fila" style="margin-top:12px"><button class="btn sec2" onclick="document.getElementById('modalPin').classList.remove('on')">Cancelar</button><button class="btn" id="btnPin" onclick="entrarPropietario()">Entrar</button></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -179,6 +215,7 @@
    ========================================================= */
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZKnnqYSlfO7i25gLPGZGcbiwilQHlAhgQfnm8OQOAxX44Nkb4xXSWl1FwBBw65yke1g/exec";
 const RESPONSABLES = ["Mónica", "Rosa", "Otra"];
+const PRECIO_DEFECTO = 15000;   // solo para el modo prueba; el precio real se pone en Code.gs
 
 /* ====== CHECKLIST ====== */
 const CHECKLIST = [
@@ -196,36 +233,38 @@ const CHECKLIST = [
   "Lavar y guardar vajilla, vasos y cubiertos.","Limpiar mesada y bacha.","Limpiar grifería y retirar restos de cal.",
   "Limpiar cocina y hornallas.","Limpiar frente y mandos de electrodomésticos.","Limpiar microondas por dentro y por fuera.",
   "Limpiar heladera por dentro y por fuera.","Revisar que no queden alimentos de huéspedes anteriores.","Limpiar puertas y tiradores de alacenas.",
-  "Revisar cajones y utensilios.","Vaciar basura y colocar bolsa nueva.","Barrer y trapear piso.",
+  "Revisar cajones y utensilios.","Comprobar que esté la jarra de plástico y en buen estado.","Vaciar basura y colocar bolsa nueva.","Barrer y trapear piso.",
   {sub:"🔥 Limpieza interior del horno"},
   "Retirar bandejas y rejillas.","Eliminar restos de comida y grasa.","Limpiar paredes interiores, techo y base.",
   "Limpiar cristal interior de la puerta.","Desengrasar rejillas y bandejas.","Limpiar juntas y bordes de la puerta.",
   "Retirar completamente residuos del producto limpiador.","Secar y volver a colocar accesorios.","Comprobar que no queden olores ni restos de grasa."]},
- {id:"salo", ico:"🛋️", t:"4. Salón y comedor", items:[
+ {id:"lava", ico:"🧺", t:"4. Lavadero", items:[
+  "Comprobar que esté el tender y en buen estado."]},
+ {id:"salo", ico:"🛋️", t:"5. Salón y comedor", items:[
   "Sacudir y acomodar almohadones.","Revisar sofá y sofá cama.","Limpiar debajo y entre los almohadones.",
   "Revisar que no haya objetos olvidados.","Limpiar mesa y sillas.","Quitar polvo de muebles y estantes.",
   "Limpiar televisor con paño adecuado.","Limpiar controles remotos.","Limpiar ventanas y espejos.","Revisar cortinas.",
   "Barrer y trapear piso.","Ordenar decoración."]},
- {id:"entr", ico:"🚪", t:"5. Entrada y zonas generales", items:[
+ {id:"entr", ico:"🚪", t:"6. Entrada y zonas generales", items:[
   "Limpiar puerta de entrada y manijas.","Desinfectar interruptores.","Limpiar picaportes de todas las puertas.",
   "Limpiar zócalos visibles.","Revisar paredes y quitar manchas.","Limpiar ventanas y marcos.","Quitar telarañas.",
   "Revisar rincones y detrás de puertas.","Comprobar iluminación.","Revisar cerradura y sistema de acceso."]},
- {id:"prof", ico:"🧽", t:"6. Limpieza profunda periódica", opcional:true, items:[
+ {id:"prof", ico:"🧽", t:"7. Limpieza profunda periódica", opcional:true, items:[
   "Mover muebles accesibles y limpiar detrás.","Limpiar debajo de camas y sofá.","Limpiar interior de placares y cajones.",
   "Desengrasar campana o purificador de cocina.","Revisar y limpiar filtros del purificador.","Limpiar filtros del aire acondicionado.",
   "Limpiar rejillas de ventilación.","Lavar cortinas cuando corresponda.","Limpiar vidrios completos y marcos.",
   "Desinfectar cestos de basura.","Limpiar azulejos y juntas.","Revisar manchas en paredes y tapizados.",
   "Limpiar interior del horno en profundidad."]},
- {id:"insu", ico:"🧴", t:"7. Reposición de insumos", nota:"Avisar si algún producto está por terminarse (anótalo con ⚠️).", items:[
+ {id:"insu", ico:"🧴", t:"8. Reposición de insumos", nota:"Avisar si algún producto está por terminarse (anótalo con ⚠️).", items:[
   "Papel higiénico suficiente.","Jabón de manos.","Detergente para vajilla.","Esponja limpia y en buen estado.",
   "Bolsas de basura.","Ropa de cama limpia.","Toallas limpias.","Elementos de limpieza disponibles."]},
- {id:"ctrl", ico:"🔍", t:"8. Control final antes del check-in", items:[
+ {id:"ctrl", ico:"🔍", t:"9. Control final antes del check-in", items:[
   "Todas las habitaciones limpias y ordenadas.","Camas perfectamente preparadas.","Baño seco, limpio y sin pelos.",
   "Cocina limpia y sin restos de comida.","Heladera limpia y funcionando.","Horno limpio y apagado.","Electrodomésticos revisados.",
   "No quedan objetos de huéspedes anteriores.","No hay olores desagradables.","Todas las luces funcionan.","Ventanas cerradas.",
   "Aire acondicionado apagado.","Basura retirada del departamento y depositada en contenedores.",
   "Puerta y cerradura funcionando correctamente.","Departamento listo para recibir huéspedes."]},
- {id:"foto", ico:"📸", t:"9. Fotos obligatorias al finalizar", fotos:true, nota:"Toca 📷 para sacar la foto o elegirla de la galería. Se guardan solas en el historial.", items:[
+ {id:"foto", ico:"📸", t:"10. Fotos obligatorias al finalizar", fotos:true, nota:"Toca 📷 para sacar la foto o elegirla de la galería. Se guardan solas en el historial.", items:[
   "Foto general del dormitorio con cama preparada.","Foto del baño completo.","Foto de la cocina y mesada.",
   "Foto del interior del horno limpio.","Foto del salón y comedor.","Foto de la entrada del departamento.",
   "Foto de cualquier daño, desperfecto o anomalía."]}
@@ -234,7 +273,6 @@ const CHECKLIST = [
 /* ====== ESTADO ====== */
 const LS_BORRADOR = "tucuman_borrador_v1", LS_DEMO = "tucuman_historial_demo", LS_PEND = "tucuman_pendientes";
 let st = nuevoEstado();
-let historial = [];
 
 function nuevoEstado(){
   return {id:"L"+Date.now(), hechos:{}, inc:{}, fotos:{}, profunda:false, final:"", inicio:new Date().toISOString(),
@@ -411,9 +449,8 @@ function actualizarContadores(){
 
 /* ====== CABECERA / OBSERVACIONES ====== */
 function initCampos(){
-  const sel = document.getElementById("responsable"), f = document.getElementById("filtroResp");
+  const sel = document.getElementById("responsable");
   sel.innerHTML = `<option value="">— Elegir —</option>` + RESPONSABLES.map(r=>`<option>${r}</option>`).join("");
-  RESPONSABLES.filter(r=>r!=="Otra").forEach(r=>f.insertAdjacentHTML("beforeend",`<option>${r}</option>`));
   cargarCampos();
 }
 function cargarCampos(){
@@ -546,18 +583,7 @@ function pedirReinicio(){
   });
 }
 
-/* ====== HISTORIAL ====== */
-async function cargarHistorial(){
-  const lista = document.getElementById("listaHist");
-  lista.innerHTML = `<div class="vacio">Cargando…</div>`;
-  if(!SCRIPT_URL){ historial = ls(LS_DEMO)||[]; return pintarHistorial(); }
-  try{
-    const r = await fetch(SCRIPT_URL+"?accion=historial");
-    const j = await r.json();
-    historial = j.registros||[];
-    pintarHistorial();
-  }catch(e){ lista.innerHTML = `<div class="vacio">No se pudo cargar el historial. Revisa la conexión y toca ↻ Actualizar.</div>`; }
-}
+/* ====== PANEL DEL PROPIETARIO ====== */
 function fmtFecha(f){ if(!f) return ""; const [y,m,d]=String(f).slice(0,10).split("-"); return `${d}/${m}/${y}`; }
 function lista(txt){ return txt ? "<ul>"+String(txt).split("\n").filter(Boolean).map(l=>`<li>${esc(l)}</li>`).join("")+"</ul>" : ""; }
 function fotosDe(r){
@@ -565,47 +591,264 @@ function fotosDe(r){
   return String(r.fotos||"").split("\n").filter(l=>l.includes("|")).map(l=>{const [n,id]=l.split("|");
     return {n, src:thumbDrive(id,300), href:`https://drive.google.com/file/d/${id}/view`};});
 }
-function pintarHistorial(){
-  const f = document.getElementById("filtroResp").value;
-  const regs = historial.filter(r=>!f || r.responsable===f);
-  const el = document.getElementById("listaHist");
-  if(!regs.length){ el.innerHTML = `<div class="vacio">Todavía no hay limpiezas guardadas.</div>`; return; }
-  el.innerHTML = regs.map(r=>{
-    const nInc = r.incidencias ? String(r.incidencias).split("\n").filter(Boolean).length : 0;
-    const hayObs = r.desperfectos||r.productos||r.objetos||r.comentarios;
-    return `<div class="hist" onclick="this.classList.toggle('abierta')">
-      <div class="l1"><span>${fmtFecha(r.fecha)} · ${esc(r.responsable)}</span><span>${r.porcentaje}%</span></div>
-      <div class="l2">${esc(r.horaInicio)}–${esc(r.horaFin)} · ${r.hechos}/${r.total} tareas</div>
-      <span class="tag ${r.finalizada==="SÍ"?"ok":"no"}">Finalizada: ${esc(r.finalizada)}</span>
-      ${nInc?`<span class="tag inc">⚠️ ${nInc} incidencia${nInc>1?"s":""}</span>`:""}
-      ${hayObs?`<span class="tag inc">📝 Observaciones</span>`:""}
-      ${r.profunda==="SÍ"?`<span class="tag prof">🧽 Profunda</span>`:""}
-      ${fotosDe(r).length?`<span class="tag prof">📸 ${fotosDe(r).length} fotos</span>`:""}
-      <div class="detalle">
-        ${fotosDe(r).length?`<h4>Fotos</h4><div class="galeria">${fotosDe(r).map(f=>`<a href="${f.href}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(f.n)}"><img src="${f.src}" loading="lazy" alt="${esc(f.n)}"></a>`).join("")}</div>${r.carpetaFotos?`<div style="margin-top:6px"><a href="${esc(r.carpetaFotos)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📁 Abrir carpeta de fotos</a></div>`:""}`:""}
-        ${nInc?`<h4>Incidencias</h4>${lista(r.incidencias)}`:""}
-        ${r.desperfectos?`<h4>Desperfectos</h4>${esc(r.desperfectos)}`:""}
-        ${r.productos?`<h4>Productos que faltan</h4>${esc(r.productos)}`:""}
-        ${r.objetos?`<h4>Objetos olvidados</h4>${esc(r.objetos)}`:""}
-        ${r.comentarios?`<h4>Otros comentarios</h4>${esc(r.comentarios)}`:""}
-        ${r.pendientes?`<h4>Tareas sin hacer</h4>${lista(r.pendientes)}`:"<h4>Tareas</h4>Todas hechas ✅"}
-        ${r.porSeccion?`<h4>Por sección</h4>${lista(r.porSeccion)}`:""}
-      </div></div>`;
-  }).join("");
+
+const LS_PIN = "tucuman_pin_prop";
+let pin = null, registros = [], precioActual = PRECIO_DEFECTO;
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+function pesos(n){ return "$ " + Math.round(n||0).toLocaleString("es-AR"); }
+async function llamar(datos){
+  const r = await fetch(SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(datos)});
+  return r.json();
+}
+function abrirPropietario(){
+  const guardado = ls(LS_PIN);
+  if(guardado){ pin = guardado; return mostrarPanel(); }
+  document.getElementById("pinIn").value="";
+  document.getElementById("modalPin").classList.add("on");
+  setTimeout(()=>document.getElementById("pinIn").focus(),100);
+}
+async function entrarPropietario(){
+  const v = document.getElementById("pinIn").value.trim(); if(!v) return;
+  const b = document.getElementById("btnPin"); b.disabled=true; b.textContent="…";
+  const ok = await cargarDatos(v);
+  b.disabled=false; b.textContent="Entrar";
+  if(!ok) return;
+  pin = v;
+  if(document.getElementById("pinRecordar").checked) ls(LS_PIN, v);
+  document.getElementById("modalPin").classList.remove("on");
+  mostrarPanel(true);
+}
+async function cargarDatos(p){
+  if(!SCRIPT_URL){ registros = ls(LS_DEMO)||[]; precioActual = PRECIO_DEFECTO; return true; }
+  try{
+    const j = await llamar({accion:"historial", pin:p});
+    if(!j.ok){ toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"Error")); if(j.error==="pin"){ try{localStorage.removeItem(LS_PIN);}catch(e){} } return false; }
+    registros = j.registros||[]; precioActual = Number(j.precio)||PRECIO_DEFECTO; return true;
+  }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); return false; }
+}
+async function mostrarPanel(yaCargado){
+  document.getElementById("vistaCheck").classList.add("oculto");
+  document.getElementById("pie").classList.add("oculto");
+  document.getElementById("barraWrap").classList.add("oculto");
+  document.getElementById("vistaProp").classList.remove("oculto");
+  document.querySelector("header h1").textContent = "🔒 Panel del propietario";
+  document.getElementById("subtit").textContent = "Depto Tucumán · historial, pagos e informes";
+  window.scrollTo(0,0);
+  if(!yaCargado) await cargarPanel(); else { prepararFiltros(); pintarPanel(); }
+}
+async function cargarPanel(){
+  document.getElementById("panel").innerHTML = `<div class="vacio">Cargando…</div>`;
+  if(await cargarDatos(pin)){ prepararFiltros(); pintarPanel(); }
+  else if(!ls(LS_PIN)) salirPropietario();
+  else document.getElementById("panel").innerHTML = `<div class="vacio">No se pudieron cargar los datos. Toca ↻ Actualizar.</div>`;
+}
+function salirPropietario(){
+  document.getElementById("vistaProp").classList.add("oculto");
+  document.getElementById("vistaCheck").classList.remove("oculto");
+  document.getElementById("pie").classList.remove("oculto");
+  document.getElementById("barraWrap").classList.remove("oculto");
+  document.querySelector("header h1").textContent = "🧹 Limpieza – Depto Tucumán";
+  actualizarContadores(); window.scrollTo(0,0);
+}
+function olvidarPin(){ try{localStorage.removeItem(LS_PIN);}catch(e){} pin=null; toast("Este teléfono ya no recuerda el PIN"); salirPropietario(); }
+
+function prepararFiltros(){
+  const per = document.getElementById("filtroPeriodo"), prev = per.value;
+  const meses = [...new Set(registros.map(r=>String(r.fecha).slice(0,7)).filter(Boolean))];
+  const hoyM = hoy().slice(0,7); if(!meses.includes(hoyM)) meses.push(hoyM);
+  meses.sort().reverse();
+  per.innerHTML = meses.map(m=>{const [y,mm]=m.split("-");return `<option value="m:${m}">${MESES[+mm-1][0].toUpperCase()+MESES[+mm-1].slice(1)} ${y}</option>`;}).join("")
+    + `<option value="u3">Últimos 3 meses</option><option value="a:${hoy().slice(0,4)}">Año ${hoy().slice(0,4)}</option><option value="todo">Todo</option>`;
+  per.value = prev && [...per.options].some(o=>o.value===prev) ? prev : "m:"+hoyM;
+  const pr = document.getElementById("filtroResp"), prevR = pr.value;
+  const nombres = [...new Set(registros.map(r=>r.responsable).filter(Boolean))].sort();
+  pr.innerHTML = `<option value="">Todas</option>` + nombres.map(n=>`<option>${esc(n)}</option>`).join("");
+  pr.value = nombres.includes(prevR) ? prevR : "";
+}
+function enPeriodo(r, per){
+  const f = String(r.fecha);
+  if(per==="todo") return true;
+  if(per.startsWith("m:")) return f.startsWith(per.slice(2));
+  if(per.startsWith("a:")) return f.startsWith(per.slice(2));
+  if(per==="u3"){ const d=new Date(); d.setMonth(d.getMonth()-2); d.setDate(1);
+    const lim = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-01"; return f>=lim; }
+  return true;
+}
+function nombrePeriodo(){ const s=document.getElementById("filtroPeriodo"); return s.options[s.selectedIndex]?.text||""; }
+function precioDe(r){ return Number(r.precio)||precioActual; }
+function lineas(t){ return String(t||"").split("\n").map(x=>x.trim()).filter(Boolean); }
+function minutos(r){
+  const a=String(r.horaInicio).match(/(\d+):(\d+)/), b=String(r.horaFin).match(/(\d+):(\d+)/); if(!a||!b) return null;
+  let m=(+b[1]*60+ +b[2])-(+a[1]*60+ +a[2]); if(m<0) m+=1440; return m>0&&m<720?m:null;
+}
+function durTxt(m){ if(m==null) return "–"; const h=Math.floor(m/60); return (h?h+" h ":"")+(m%60)+" min"; }
+function diasDesde(f){ const d=new Date(f+"T12:00:00"); return Math.floor((Date.now()-d)/86400000); }
+
+let secAbiertas = new Set(["pagos","inc"]);
+function bloque(id,ico,tit,cnt,html){
+  return `<div class="card sec ${secAbiertas.has(id)?"abierta":""}" id="ps_${id}"><div class="secHead" onclick="this.parentNode.classList.toggle('abierta');secAbiertas.has('${id}')?secAbiertas.delete('${id}'):secAbiertas.add('${id}')">
+    <span class="ico">${ico}</span><span class="tit">${tit}</span>${cnt!==""?`<span class="cnt">${cnt}</span>`:""}<span class="flecha">▶</span></div><div class="secBody">${html}</div></div>`;
+}
+
+function pintarPanel(){
+  const per = document.getElementById("filtroPeriodo").value, quien = document.getElementById("filtroResp").value;
+  const regs = registros.filter(r=>enPeriodo(r,per) && (!quien || r.responsable===quien))
+                        .sort((a,b)=>String(b.fecha+b.horaFin).localeCompare(String(a.fecha+a.horaFin)));
+  const el = document.getElementById("panel");
+  const total = regs.reduce((s,r)=>s+precioDe(r),0);
+  const pagadas = regs.filter(r=>r.pagado), pendientes = regs.filter(r=>!r.pagado);
+  const pendTotal = pendientes.reduce((s,r)=>s+precioDe(r),0);
+  const nIncid = regs.reduce((s,r)=>s+lineas(r.incidencias).length+(r.desperfectos?1:0),0);
+  const media = regs.length ? Math.round(regs.reduce((s,r)=>s+(+r.porcentaje||0),0)/regs.length) : 0;
+  const durs = regs.map(minutos).filter(x=>x!=null);
+  const durMedia = durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null;
+  // limpieza profunda: se mira en TODO el historial
+  const prof = registros.filter(r=>r.profunda==="SÍ").map(r=>String(r.fecha)).sort().pop();
+  const dProf = prof ? diasDesde(prof) : null;
+  const noFin = regs.filter(r=>r.finalizada!=="SÍ").length;
+
+  let h = `<div class="kpis">
+    <div class="kpi"><div class="e">Limpiezas</div><div class="v">${regs.length}</div><div class="s">${esc(nombrePeriodo())}</div></div>
+    <div class="kpi"><div class="e">Importe total</div><div class="v">${pesos(total)}</div><div class="s">${pesos(precioActual)} por limpieza</div></div>
+    <div class="kpi ${pendTotal?"ojo":"bien"}"><div class="e">Pendiente de pago</div><div class="v">${pesos(pendTotal)}</div><div class="s">${pendientes.length} limpieza${pendientes.length!==1?"s":""}</div></div>
+    <div class="kpi bien"><div class="e">Pagado</div><div class="v">${pesos(total-pendTotal)}</div><div class="s">${pagadas.length} limpieza${pagadas.length!==1?"s":""}</div></div>
+    <div class="kpi ${media<90&&regs.length?"ojo":""}"><div class="e">Cumplimiento medio</div><div class="v">${regs.length?media+"%":"–"}</div><div class="s">${noFin?noFin+" sin finalizar":"todas finalizadas"}</div></div>
+    <div class="kpi ${nIncid?"ojo":""}"><div class="e">Incidencias</div><div class="v">${nIncid}</div><div class="s">duración media ${durTxt(durMedia)}</div></div>
+    <div class="kpi ${dProf==null||dProf>30?"ojo":""}" style="grid-column:1/-1"><div class="e">🧽 Última limpieza profunda</div><div class="v" style="font-size:18px">${prof?fmtFecha(prof)+` · hace ${dProf} día${dProf!==1?"s":""}`:"Nunca registrada"}</div><div class="s">${dProf==null||dProf>30?"Conviene programar una (recomendado: una vez al mes)":"Al día"}</div></div>
+  </div>`;
+
+  if(!regs.length){ el.innerHTML = h + `<div class="card"><div class="vacio">No hay limpiezas en este periodo.</div></div>` + pieOpciones(); return; }
+
+  // ---- PAGOS ----
+  let hp = "";
+  if(pendientes.length){
+    hp += pendientes.map(r=>`<label class="fila2 pagoRow"><input type="checkbox" class="chkPago" value="${esc(r.id)}" checked onchange="sumaPago()">
+      <span class="izq">${fmtFecha(r.fecha)} · ${esc(r.responsable)}<small>${r.porcentaje}% hecho · Finalizada: ${esc(r.finalizada)}</small></span><span class="der">${pesos(precioDe(r))}</span></label>`).join("");
+    hp += `<div class="totalPago"><span>Seleccionado</span><span id="sumaPago">${pesos(pendTotal)}</span></div>
+      <div class="acciones" style="padding-top:12px"><button class="btn" onclick="marcarPagadas(true)">✅ Marcar como pagadas</button></div>`;
+  } else hp += `<div class="sinDatos">No hay nada pendiente de pago en este periodo. 👍</div>`;
+  if(pagadas.length) hp += `<div class="sub" style="padding-top:14px">Ya pagadas</div>` + pagadas.map(r=>`<div class="fila2"><span class="izq">${fmtFecha(r.fecha)} · ${esc(r.responsable)}<small>Pagada el ${esc(r.pagado)}</small></span><span class="der">${pesos(precioDe(r))}</span></div>`).join("");
+  h += bloque("pagos","💰","Pagos", pendientes.length?pendientes.length+" pend.":"✓", hp);
+
+  // ---- POR PERSONA ----
+  const pers = {};
+  regs.forEach(r=>{ const p = pers[r.responsable] ||= {n:0,imp:0,pend:0,pct:0,fechas:[],inc:0};
+    p.n++; p.imp+=precioDe(r); if(!r.pagado) p.pend+=precioDe(r); p.pct+=(+r.porcentaje||0); p.fechas.push(r);
+    p.inc += lineas(r.incidencias).length; });
+  h += bloque("pers","👥","Por persona", Object.keys(pers).length, Object.entries(pers).map(([n,p])=>`
+    <div class="fila2"><span class="izq"><b>${esc(n)}</b><small>${p.n} limpieza${p.n>1?"s":""} · cumplimiento ${Math.round(p.pct/p.n)}% · ${p.inc} incidencia${p.inc!==1?"s":""} anotada${p.inc!==1?"s":""}</small>
+      <small>${p.pend?`<span style="color:var(--naranja);font-weight:700">Pendiente: ${pesos(p.pend)}</span>`:"Todo pagado"}</small></span>
+      <span class="der" style="text-align:right">${pesos(p.imp)}<br><button class="btnMini" style="margin-top:6px" onclick='whatsPersona(${JSON.stringify(n)})'>📲 Resumen</button></span></div>`).join(""));
+
+  // ---- INCIDENCIAS ----
+  const grupos = {};
+  regs.forEach(r=>lineas(r.incidencias).forEach(l=>{ const [k,nota] = l.split(" → ");
+    (grupos[k] ||= []).push({f:r.fecha, q:r.responsable, nota:nota||""}); }));
+  const gOrd = Object.entries(grupos).sort((a,b)=>b[1].length-a[1].length);
+  const desp = regs.filter(r=>r.desperfectos || fotosDe(r).some(f=>f.n==="Desperfecto"));
+  let hi = "";
+  if(gOrd.length) hi += `<div class="sub">Incidencias por tarea (las que más se repiten arriba)</div>` + gOrd.map(([k,v])=>`
+    <div class="fila2"><span class="izq"><b>${esc(k)}</b>${v.map(x=>`<small>${fmtFecha(x.f)} · ${esc(x.q)}: ${esc(x.nota)}</small>`).join("")}</span><span class="num ${v.length>1?"":"gris"}">${v.length}</span></div>`).join("");
+  if(desp.length) hi += `<div class="sub" style="padding-top:14px">Desperfectos encontrados</div>` + desp.map(r=>{
+    const fs = fotosDe(r).filter(f=>f.n==="Desperfecto");
+    return `<div class="fila2"><span class="izq"><b>${fmtFecha(r.fecha)} · ${esc(r.responsable)}</b><small>${esc(r.desperfectos||"(solo foto)")}</small>
+      ${fs.length?`<div class="galeria">${fs.map(f=>`<a href="${f.href}" target="_blank" rel="noopener"><img src="${f.src}" loading="lazy" alt=""></a>`).join("")}</div>`:""}</span></div>`;}).join("");
+  if(!hi) hi = `<div class="sinDatos">Sin incidencias ni desperfectos en este periodo. 👍</div>`;
+  h += bloque("inc","⚠️","Incidencias y desperfectos", nIncid, hi);
+
+  // ---- COMPRAS ----
+  const comp = regs.filter(r=>r.productos);
+  h += bloque("comp","🛒","Productos que faltan", comp.length, comp.length ? comp.map(r=>`<div class="fila2"><span class="izq">${esc(r.productos)}<small>${fmtFecha(r.fecha)} · ${esc(r.responsable)}</small></span></div>`).join("")
+     + `<div class="acciones" style="padding-top:12px"><button class="btn sec2" onclick="whatsCompras()">📲 Enviar lista por WhatsApp</button></div>` : `<div class="sinDatos">No avisaron de productos que falten.</div>`);
+
+  // ---- OBJETOS ----
+  const obj = regs.filter(r=>r.objetos);
+  h += bloque("obj","🎒","Objetos olvidados por huéspedes", obj.length, obj.length ? obj.map(r=>`<div class="fila2"><span class="izq">${esc(r.objetos)}<small>${fmtFecha(r.fecha)} · ${esc(r.responsable)}</small></span></div>`).join("") : `<div class="sinDatos">Ninguno.</div>`);
+
+  // ---- TAREAS SALTADAS ----
+  const salt = {};
+  regs.forEach(r=>lineas(r.pendientes).forEach(l=>salt[l]=(salt[l]||0)+1));
+  const sOrd = Object.entries(salt).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  h += bloque("salt","⏳","Tareas que más se quedan sin hacer", sOrd.length, sOrd.length ? `<div class="sinDatos" style="padding-bottom:0">Veces sin marcar, sobre ${regs.length} limpieza${regs.length>1?"s":""}.</div>` + sOrd.map(([t,n])=>`<div class="fila2"><span class="izq">${esc(t)}</span><span class="num ${n/regs.length>=.5?"":"gris"}">${n}</span></div>`).join("") : `<div class="sinDatos">Todas las tareas se hicieron siempre. 👏</div>`);
+
+  // ---- COMENTARIOS ----
+  const com = regs.filter(r=>r.comentarios);
+  if(com.length) h += bloque("com","💬","Comentarios", com.length, com.map(r=>`<div class="fila2"><span class="izq">${esc(r.comentarios)}<small>${fmtFecha(r.fecha)} · ${esc(r.responsable)}</small></span></div>`).join(""));
+
+  // ---- HISTORIAL ----
+  h += bloque("hist","📋","Historial completo", regs.length, regs.map(tarjetaHist).join(""));
+  el.innerHTML = h + pieOpciones();
+}
+function pieOpciones(){ return SCRIPT_URL && ls(LS_PIN) ? `<button class="btnProp" onclick="olvidarPin()">Dejar de recordar el PIN en este teléfono</button>` : ""; }
+function tarjetaHist(r){
+  const nInc = lineas(r.incidencias).length;
+  const hayObs = r.desperfectos||r.productos||r.objetos||r.comentarios;
+  const fs = fotosDe(r);
+  return `<div class="hist" onclick="this.classList.toggle('abierta')">
+    <div class="l1"><span>${fmtFecha(r.fecha)} · ${esc(r.responsable)}</span><span>${r.porcentaje}%</span></div>
+    <div class="l2">${esc(r.horaInicio)}–${esc(r.horaFin)} (${durTxt(minutos(r))}) · ${r.hechos}/${r.total} tareas · ${pesos(precioDe(r))}</div>
+    <span class="tag ${r.finalizada==="SÍ"?"ok":"no"}">Finalizada: ${esc(r.finalizada)}</span>
+    <span class="tag ${r.pagado?"pag":"nopag"}">${r.pagado?"💰 Pagada":"Sin pagar"}</span>
+    ${nInc?`<span class="tag inc">⚠️ ${nInc} incidencia${nInc>1?"s":""}</span>`:""}
+    ${hayObs?`<span class="tag inc">📝 Observaciones</span>`:""}
+    ${r.profunda==="SÍ"?`<span class="tag prof">🧽 Profunda</span>`:""}
+    ${fs.length?`<span class="tag prof">📸 ${fs.length} fotos</span>`:""}
+    <div class="detalle">
+      ${fs.length?`<h4>Fotos</h4><div class="galeria">${fs.map(f=>`<a href="${f.href}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(f.n)}"><img src="${f.src}" loading="lazy" alt="${esc(f.n)}"></a>`).join("")}</div>${r.carpetaFotos?`<div style="margin-top:6px"><a href="${esc(r.carpetaFotos)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📁 Abrir carpeta de fotos</a></div>`:""}`:""}
+      ${nInc?`<h4>Incidencias</h4>${lista(r.incidencias)}`:""}
+      ${r.desperfectos?`<h4>Desperfectos</h4>${esc(r.desperfectos)}`:""}
+      ${r.productos?`<h4>Productos que faltan</h4>${esc(r.productos)}`:""}
+      ${r.objetos?`<h4>Objetos olvidados</h4>${esc(r.objetos)}`:""}
+      ${r.comentarios?`<h4>Otros comentarios</h4>${esc(r.comentarios)}`:""}
+      ${r.pendientes?`<h4>Tareas sin hacer</h4>${lista(r.pendientes)}`:"<h4>Tareas</h4>Todas hechas ✅"}
+      ${r.porSeccion?`<h4>Por sección</h4>${lista(r.porSeccion)}`:""}
+      <div style="margin-top:12px"><button class="btnMini" onclick='event.stopPropagation();cambiarPago([${JSON.stringify(String(r.id))}], ${r.pagado?"false":"true"})'>${r.pagado?"↩︎ Marcar como no pagada":"💰 Marcar como pagada"}</button></div>
+    </div></div>`;
+}
+function sumaPago(){
+  const ids = [...document.querySelectorAll(".chkPago:checked")].map(c=>c.value);
+  const t = registros.filter(r=>ids.includes(String(r.id))).reduce((s,r)=>s+precioDe(r),0);
+  document.getElementById("sumaPago").textContent = pesos(t);
+}
+function marcarPagadas(){
+  const ids = [...document.querySelectorAll(".chkPago:checked")].map(c=>c.value);
+  if(!ids.length) return toast("No hay ninguna seleccionada");
+  const t = registros.filter(r=>ids.includes(String(r.id))).reduce((s,r)=>s+precioDe(r),0);
+  modal("¿Marcar como pagadas?", `${ids.length} limpieza${ids.length>1?"s":""} por un total de ${pesos(t)}.`, ()=>cambiarPago(ids,true));
+}
+async function cambiarPago(ids, pagar){
+  const fecha = new Date().toLocaleDateString("es-AR");
+  if(!SCRIPT_URL){
+    const h = ls(LS_DEMO)||[]; h.forEach(r=>{ if(ids.includes(String(r.id))) r.pagado = pagar?fecha:""; }); ls(LS_DEMO,h); registros=h;
+  } else {
+    try{ const j = await llamar({accion:"pagar", pin, ids, pagado:pagar});
+      if(!j.ok) return toast(j.error==="pin"?"PIN incorrecto":"No se pudo guardar");
+      registros.forEach(r=>{ if(ids.includes(String(r.id))) r.pagado = pagar ? (j.fecha||fecha) : ""; });
+    }catch(e){ return toast("Sin conexión. Inténtalo de nuevo."); }
+  }
+  toast(pagar ? "💰 Marcadas como pagadas" : "Marcada como no pagada");
+  pintarPanel();
+}
+function regsFiltrados(){
+  const per = document.getElementById("filtroPeriodo").value, quien = document.getElementById("filtroResp").value;
+  return registros.filter(r=>enPeriodo(r,per) && (!quien || r.responsable===quien)).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+}
+function whatsPersona(n){
+  const per = document.getElementById("filtroPeriodo").value;
+  const rs = registros.filter(r=>enPeriodo(r,per) && r.responsable===n).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  const tot = rs.reduce((s,r)=>s+precioDe(r),0), pend = rs.filter(r=>!r.pagado).reduce((s,r)=>s+precioDe(r),0);
+  let t = `🧹 *Limpiezas Depto Tucumán – ${nombrePeriodo()}*\n👤 ${n}\n\n` + rs.map(r=>`• ${fmtFecha(r.fecha)} – ${pesos(precioDe(r))}${r.pagado?" ✅ pagada":""}`).join("\n");
+  t += `\n\n*Total: ${rs.length} limpieza${rs.length>1?"s":""} = ${pesos(tot)}*`;
+  if(pend && pend!==tot) t += `\nPendiente de pago: ${pesos(pend)}`;
+  location.href = "https://wa.me/?text="+encodeURIComponent(t);
+}
+function whatsCompras(){
+  const rs = regsFiltrados().filter(r=>r.productos);
+  const t = `🛒 *Depto Tucumán – productos que faltan*\n\n` + rs.map(r=>`• ${r.productos} (${fmtFecha(r.fecha)})`).join("\n");
+  location.href = "https://wa.me/?text="+encodeURIComponent(t);
 }
 
 /* ====== UI ====== */
-function verTab(t){
-  const h = t==="hist";
-  document.getElementById("vistaCheck").classList.toggle("oculto",h);
-  document.getElementById("vistaHist").classList.toggle("oculto",!h);
-  document.getElementById("pie").classList.toggle("oculto",h);
-  document.getElementById("barraWrap").classList.toggle("oculto",h);
-  document.getElementById("tabCheck").classList.toggle("on",!h);
-  document.getElementById("tabHist").classList.toggle("on",h);
-  if(h) cargarHistorial();
-  window.scrollTo(0,0);
-}
 let tToast;
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("on");clearTimeout(tToast);tToast=setTimeout(()=>t.classList.remove("on"),3200);}
 function modal(tit,txt,ok,okTxt){
