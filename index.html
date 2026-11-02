@@ -25,7 +25,7 @@
   .card{background:var(--tarjeta);border-radius:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden}
   .pad{padding:14px}
   label.campo{display:block;font-size:13px;color:var(--gris);margin:10px 0 4px;font-weight:600}
-  input[type=text],input[type=date],select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid var(--borde);border-radius:10px;background:#fff;font-family:inherit;color:inherit}
+  input[type=text],input[type=date],input[type=time],input[type=tel],select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid var(--borde);border-radius:10px;background:#fff;font-family:inherit;color:inherit}
   textarea{min-height:60px;resize:vertical}
   .fila{display:flex;gap:10px}.fila>*{flex:1}
   .secHead{display:flex;align-items:center;gap:10px;padding:14px;cursor:pointer;user-select:none}
@@ -122,6 +122,12 @@
   .chkLinea{display:flex;align-items:center;gap:8px;margin:12px 0 4px;font-size:15px;color:var(--gris)}
   .chkLinea input{width:20px;height:20px}
   .sinDatos{padding:14px;color:var(--gris);font-size:14px}
+  .modal .caja{max-height:92vh;overflow:auto}
+  a.btnMini{display:inline-block;text-decoration:none}
+  .btnMini.rojo{border-color:#dc2626;color:#dc2626}
+  .der.acc{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .compPrev img{display:block;max-width:100%;max-height:220px;border-radius:10px;margin-top:10px}
+  .agenda .fila2{padding:10px 14px}
 </style>
 </head>
 <body>
@@ -135,6 +141,7 @@
 
 <main id="vistaCheck">
   <div id="avisoDemo" class="aviso oculto">Modo prueba: el historial se guarda solo en este teléfono hasta que se configure la hoja de Google.</div>
+  <div id="agendaChicas"></div>
 
   <div class="card pad">
     <div class="fila">
@@ -205,6 +212,33 @@
   <div class="fila" style="margin-top:12px"><button class="btn sec2" onclick="document.getElementById('modalPin').classList.remove('on')">Cancelar</button><button class="btn" id="btnPin" onclick="entrarPropietario()">Entrar</button></div>
 </div></div>
 
+<div class="modal" id="modalPago"><div class="caja">
+  <h3 id="pagoTit">💰 Registrar pago</h3><p id="pagoTxt"></p>
+  <input type="file" id="pagoFoto" accept="image/*" class="oculto" onchange="fotoComprobante(this)">
+  <button class="btnFoto" id="pagoBtnFoto" onclick="document.getElementById('pagoFoto').click()">📎 Adjuntar comprobante (foto o captura)</button>
+  <div id="pagoPrev" class="compPrev"></div>
+  <div class="fila" style="margin-top:14px"><button class="btn sec2" onclick="cerrarPago()">Cancelar</button><button class="btn" id="pagoOk" onclick="confirmarPago()">Confirmar pago</button></div>
+</div></div>
+
+<div class="modal" id="modalProg"><div class="caja">
+  <h3 id="progTit">📅 Programar limpieza</h3>
+  <div class="fila">
+    <div><label class="campo">Fecha</label><input type="date" id="progFecha"></div>
+    <div><label class="campo">Hora</label><input type="time" id="progHora"></div>
+  </div>
+  <label class="campo">Persona</label><select id="progPersona"></select>
+  <label class="campo">Nota (opcional)</label><input type="text" id="progNota" placeholder="Ej.: llegan huéspedes a las 15 h">
+  <div class="fila" style="margin-top:14px"><button class="btn sec2" onclick="cerrarProg()">Cancelar</button><button class="btn" id="progOk" onclick="guardarProg()">Guardar</button></div>
+</div></div>
+
+<div class="modal" id="modalPers"><div class="caja">
+  <h3>👥 Personas y teléfonos</h3>
+  <p>El teléfono, con código de país y sin espacios. Móvil de Argentina: 549 + código de área + número (ej.: 5493815551234).</p>
+  <div id="persLista"></div>
+  <button class="btnMini" onclick="filaPersona()">＋ Añadir persona</button>
+  <div class="fila" style="margin-top:14px"><button class="btn sec2" onclick="document.getElementById('modalPers').classList.remove('on')">Cancelar</button><button class="btn" id="persOk" onclick="guardarPersonas()">Guardar</button></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -214,7 +248,7 @@
    Si se deja vacía, la app funciona en "modo prueba" y guarda en el teléfono.
    ========================================================= */
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx676wO3DodwAAmvCn8_xknM4LmZLc_3EPOWXTEA9SULSe5o2GeNI_IwZu_6pel5KkafQ/exec";
-const RESPONSABLES = ["Mónica", "Rosa", "Otra"];
+const RESPONSABLES = ["Mónica", "Andrea", "Otra"];
 const PRECIO_DEFECTO = 15000;   // solo para el modo prueba; el precio real se pone en Code.gs
 
 /* ====== CHECKLIST ====== */
@@ -593,7 +627,7 @@ function fotosDe(r){
 }
 
 const LS_PIN = "tucuman_pin_prop";
-let pin = null, registros = [], precioActual = PRECIO_DEFECTO;
+let pin = null, registros = [], precioActual = PRECIO_DEFECTO, programadas = [], personas = [], hoyServ = "";
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 function pesos(n){ return "$ " + Math.round(n||0).toLocaleString("es-AR"); }
 async function llamar(datos){
@@ -623,7 +657,8 @@ async function cargarDatos(p){
   try{
     const j = await llamar({accion:"historial", pin:p});
     if(!j.ok){ toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"Error")); if(j.error==="pin"){ try{localStorage.removeItem(LS_PIN);}catch(e){} } return false; }
-    registros = j.registros||[]; precioActual = Number(j.precio)||PRECIO_DEFECTO; return true;
+    registros = j.registros||[]; precioActual = Number(j.precio)||PRECIO_DEFECTO;
+    programadas = j.programadas||[]; personas = j.personas||[]; hoyServ = j.hoy||""; return true;
   }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); return false; }
 }
 async function mostrarPanel(yaCargado){
@@ -648,7 +683,7 @@ function salirPropietario(){
   document.getElementById("pie").classList.remove("oculto");
   document.getElementById("barraWrap").classList.remove("oculto");
   document.querySelector("header h1").textContent = "🧹 Limpieza – Depto Tucumán";
-  actualizarContadores(); window.scrollTo(0,0);
+  actualizarContadores(); window.scrollTo(0,0); cargarAgenda();
 }
 function olvidarPin(){ try{localStorage.removeItem(LS_PIN);}catch(e){} pin=null; toast("Este teléfono ya no recuerda el PIN"); salirPropietario(); }
 
@@ -684,7 +719,7 @@ function minutos(r){
 function durTxt(m){ if(m==null) return "–"; const h=Math.floor(m/60); return (h?h+" h ":"")+(m%60)+" min"; }
 function diasDesde(f){ const d=new Date(f+"T12:00:00"); return Math.floor((Date.now()-d)/86400000); }
 
-let secAbiertas = new Set(["pagos","inc"]);
+let secAbiertas = new Set(["cal","pagos","inc"]);
 function bloque(id,ico,tit,cnt,html){
   return `<div class="card sec ${secAbiertas.has(id)?"abierta":""}" id="ps_${id}"><div class="secHead" onclick="this.parentNode.classList.toggle('abierta');secAbiertas.has('${id}')?secAbiertas.delete('${id}'):secAbiertas.add('${id}')">
     <span class="ico">${ico}</span><span class="tit">${tit}</span>${cnt!==""?`<span class="cnt">${cnt}</span>`:""}<span class="flecha">▶</span></div><div class="secBody">${html}</div></div>`;
@@ -707,7 +742,7 @@ function pintarPanel(){
   const dProf = prof ? diasDesde(prof) : null;
   const noFin = regs.filter(r=>r.finalizada!=="SÍ").length;
 
-  let h = `<div class="kpis">
+  let h = bloque("cal","📅","Calendario de limpiezas", proximas().length, htmlCalendario()) + `<div class="kpis">
     <div class="kpi"><div class="e">Limpiezas</div><div class="v">${regs.length}</div><div class="s">${esc(nombrePeriodo())}</div></div>
     <div class="kpi"><div class="e">Importe total</div><div class="v">${pesos(total)}</div><div class="s">${pesos(precioActual)} por limpieza</div></div>
     <div class="kpi ${pendTotal?"ojo":"bien"}"><div class="e">Pendiente de pago</div><div class="v">${pesos(pendTotal)}</div><div class="s">${pendientes.length} limpieza${pendientes.length!==1?"s":""}</div></div>
@@ -727,7 +762,7 @@ function pintarPanel(){
     hp += `<div class="totalPago"><span>Seleccionado</span><span id="sumaPago">${pesos(pendTotal)}</span></div>
       <div class="acciones" style="padding-top:12px"><button class="btn" onclick="marcarPagadas(true)">✅ Marcar como pagadas</button></div>`;
   } else hp += `<div class="sinDatos">No hay nada pendiente de pago en este periodo. 👍</div>`;
-  if(pagadas.length) hp += `<div class="sub" style="padding-top:14px">Ya pagadas</div>` + pagadas.map(r=>`<div class="fila2"><span class="izq">${fmtFecha(r.fecha)} · ${esc(r.responsable)}<small>Pagada el ${esc(r.pagado)}</small></span><span class="der">${pesos(precioDe(r))}</span></div>`).join("");
+  if(pagadas.length) hp += `<div class="sub" style="padding-top:14px">Ya pagadas</div>` + pagadas.map(r=>`<div class="fila2"><span class="izq">${fmtFecha(r.fecha)} · ${esc(r.responsable)}<small>Pagada el ${esc(r.pagado)}</small></span><span class="der" style="text-align:right">${pesos(precioDe(r))}<br><span style="display:inline-block;margin-top:6px">${compHtml(r)}</span></span></div>`).join("");
   h += bloque("pagos","💰","Pagos", pendientes.length?pendientes.length+" pend.":"✓", hp);
 
   // ---- POR PERSONA ----
@@ -802,7 +837,9 @@ function tarjetaHist(r){
       ${r.comentarios?`<h4>Otros comentarios</h4>${esc(r.comentarios)}`:""}
       ${r.pendientes?`<h4>Tareas sin hacer</h4>${lista(r.pendientes)}`:"<h4>Tareas</h4>Todas hechas ✅"}
       ${r.porSeccion?`<h4>Por sección</h4>${lista(r.porSeccion)}`:""}
-      <div style="margin-top:12px"><button class="btnMini" onclick='event.stopPropagation();cambiarPago([${JSON.stringify(String(r.id))}], ${r.pagado?"false":"true"})'>${r.pagado?"↩︎ Marcar como no pagada":"💰 Marcar como pagada"}</button></div>
+      <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${r.pagado
+        ? `<button class="btnMini" onclick='event.stopPropagation();cambiarPago([${JSON.stringify(String(r.id))}], false)'>↩︎ Marcar como no pagada</button>${compHtml(r)}`
+        : `<button class="btnMini" onclick='event.stopPropagation();abrirPago([${JSON.stringify(String(r.id))}],"pagar")'>💰 Marcar como pagada</button>`}</div>
     </div></div>`;
 }
 function sumaPago(){
@@ -814,7 +851,7 @@ function marcarPagadas(){
   const ids = [...document.querySelectorAll(".chkPago:checked")].map(c=>c.value);
   if(!ids.length) return toast("No hay ninguna seleccionada");
   const t = registros.filter(r=>ids.includes(String(r.id))).reduce((s,r)=>s+precioDe(r),0);
-  modal("¿Marcar como pagadas?", `${ids.length} limpieza${ids.length>1?"s":""} por un total de ${pesos(t)}.`, ()=>cambiarPago(ids,true));
+  abrirPago(ids, "pagar");
 }
 async function cambiarPago(ids, pagar){
   const fecha = new Date().toLocaleDateString("es-AR");
@@ -848,6 +885,173 @@ function whatsCompras(){
   location.href = "https://wa.me/?text="+encodeURIComponent(t);
 }
 
+/* ====== COMPROBANTES DE PAGO ====== */
+let pagoIds = [], pagoFoto = null, pagoModo = "pagar";
+function compHtml(r){
+  if(r.comprobante) return `<a class="btnMini" href="https://drive.google.com/file/d/${esc(r.comprobante)}/view" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧾 Comprobante</a>`;
+  return r.pagado ? `<button class="btnMini" onclick='event.stopPropagation();abrirPago([${JSON.stringify(String(r.id))}],"comp")'>📎 Añadir comprobante</button>` : "";
+}
+function abrirPago(ids, modo){
+  pagoIds = ids; pagoFoto = null; pagoModo = modo;
+  const rs = registros.filter(r=>ids.includes(String(r.id)));
+  const t = rs.reduce((s,r)=>s+precioDe(r),0);
+  document.getElementById("pagoTit").textContent = modo==="pagar" ? "💰 Registrar pago" : "🧾 Añadir comprobante";
+  document.getElementById("pagoTxt").textContent = modo==="pagar"
+    ? `${rs.length} limpieza${rs.length>1?"s":""} por un total de ${pesos(t)}. Puedes adjuntar la foto o captura de la transferencia.`
+    : `Limpieza del ${fmtFecha(rs[0]?.fecha)} · ${rs[0]?.responsable||""}. Elige la foto o captura del pago.`;
+  document.getElementById("pagoFoto").value = "";
+  document.getElementById("pagoPrev").innerHTML = "";
+  document.getElementById("pagoBtnFoto").textContent = modo==="pagar" ? "📎 Adjuntar comprobante (opcional)" : "📎 Elegir foto del comprobante";
+  document.getElementById("pagoOk").textContent = modo==="pagar" ? "Confirmar pago" : "Guardar comprobante";
+  document.getElementById("modalPago").classList.add("on");
+}
+function cerrarPago(){ document.getElementById("modalPago").classList.remove("on"); }
+async function fotoComprobante(inp){
+  const f = inp.files[0]; if(!f) return;
+  try{
+    pagoFoto = await comprimir(f);
+    document.getElementById("pagoPrev").innerHTML = `<img src="${pagoFoto}" alt="Comprobante">`;
+    document.getElementById("pagoBtnFoto").textContent = "📎 Cambiar foto";
+  }catch(e){ toast("No se pudo leer esa imagen"); }
+}
+async function confirmarPago(){
+  if(pagoModo==="comp" && !pagoFoto) return toast("Elige primero la foto del comprobante");
+  if(!SCRIPT_URL){ cerrarPago(); if(pagoModo==="pagar") cambiarPago(pagoIds,true); else toast("Los comprobantes necesitan la hoja de Google"); return; }
+  const b = document.getElementById("pagoOk"), txt = b.textContent; b.disabled = true; b.textContent = "Guardando…";
+  const data = pagoFoto ? pagoFoto.split(",")[1] : "";
+  const ids = pagoIds.slice(), modo = pagoModo;
+  try{
+    const j = modo==="pagar"
+      ? await llamar({accion:"pagar", pin, ids, pagado:true, comprobante:data})
+      : await llamar({accion:"comprobante", pin, ids, data});
+    if(!j.ok) return toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"No se pudo guardar"));
+    registros.forEach(r=>{ if(ids.includes(String(r.id))){
+      if(modo==="pagar") r.pagado = j.fecha || new Date().toLocaleDateString("es-AR");
+      if(j.comprobante) r.comprobante = j.comprobante; }});
+    cerrarPago(); pintarPanel();
+    const pers = [...new Set(registros.filter(r=>ids.includes(String(r.id))).map(r=>r.responsable))];
+    if(pers.length===1) modal(modo==="pagar" ? "💰 Pago registrado" : "🧾 Comprobante guardado",
+      `¿Quieres avisar a ${pers[0]} por WhatsApp${j.comprobante||registros.some(r=>ids.includes(String(r.id))&&r.comprobante)?" con el enlace al comprobante":""}?`,
+      ()=>whatsPago(ids), "📲 Enviar WhatsApp");
+    else toast(modo==="pagar" ? "💰 Marcadas como pagadas" : "🧾 Comprobante guardado");
+  }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); }
+  finally{ b.disabled = false; b.textContent = txt; }
+}
+function whatsPago(ids){
+  const rs = registros.filter(r=>ids.includes(String(r.id))).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  if(!rs.length) return;
+  const n = rs[0].responsable, tot = rs.reduce((s,r)=>s+precioDe(r),0);
+  const comps = [...new Set(rs.map(r=>r.comprobante).filter(Boolean))];
+  let t = `💰 *Pago de limpiezas – Depto Tucumán*\n\nHola ${n} 👋, te he pagado:\n` + rs.map(r=>`• ${fmtFecha(r.fecha)} – ${pesos(precioDe(r))}`).join("\n");
+  t += `\n\n*Total: ${pesos(tot)}*`;
+  if(comps.length) t += `\n\n🧾 Comprobante:\n` + comps.map(c=>`https://drive.google.com/file/d/${c}/view`).join("\n");
+  t += `\n\n¡Gracias!`;
+  location.href = `https://wa.me/${telDe(n)}?text=` + encodeURIComponent(t);
+}
+
+/* ====== CALENDARIO DE LIMPIEZAS ====== */
+const DIAS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+let progEditando = null;
+function fechaLarga(f){ if(!f) return ""; const d = new Date(f+"T12:00:00"); return DIAS[d.getDay()]+" "+fmtFecha(f); }
+function telDe(n){ const p = personas.find(x=>x.nombre===n); return p ? String(p.telefono||"").replace(/\D/g,"") : ""; }
+function proximas(n){ const h = hoyServ||hoy(); return programadas.filter(p=>p.fecha>=h && (!n||p.persona===n)).sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora)); }
+function hecha(p){ return registros.some(r=>String(r.fecha)===p.fecha && r.responsable===p.persona); }
+function htmlCalendario(){
+  const h = hoyServ||hoy(), prox = proximas();
+  const pasadas = programadas.filter(p=>p.fecha<h).sort((a,b)=>(b.fecha+b.hora).localeCompare(a.fecha+a.hora)).slice(0,5);
+  let x = `<div class="acciones" style="padding-top:12px"><button class="btn" onclick="abrirProg()">＋ Programar limpieza</button><button class="btn sec2" onclick="abrirPersonas()">👥 Personas</button></div>`;
+  x += prox.length ? prox.map(p=>filaProg(p,true)).join("") : `<div class="sinDatos">No hay limpiezas programadas.</div>`;
+  if(pasadas.length) x += `<div class="sub" style="padding-top:14px">Programadas anteriores</div>` + pasadas.map(p=>filaProg(p,false)).join("");
+  return x;
+}
+function filaProg(p, futura){
+  const h = hoyServ||hoy(), tel = telDe(p.persona), id = JSON.stringify(p.id);
+  const estado = futura ? (p.fecha===h ? ` <span class="tag nopag">Hoy</span>` : "")
+                        : (hecha(p) ? ` <span class="tag ok">✓ Hecha</span>` : ` <span class="tag no">Sin registrar</span>`);
+  return `<div class="fila2"><span class="izq"><b>${fechaLarga(p.fecha)}${p.hora?" · "+esc(p.hora):""}</b>${estado}
+      <small>👤 ${esc(p.persona)}${tel?"":` · <span style="color:var(--naranja)">sin teléfono</span>`}</small>${p.nota?`<small>📝 ${esc(p.nota)}</small>`:""}</span>
+    <span class="der acc">${futura?`<button class="btnMini" title="Enviar por WhatsApp" onclick='whatsProg(${id})'>📲</button>`:""}<button class="btnMini" title="Editar" onclick='abrirProg(${id})'>✏️</button><button class="btnMini rojo" title="Borrar" onclick='borrarProg(${id})'>🗑️</button></span></div>`;
+}
+function abrirProg(id){
+  if(!SCRIPT_URL) return toast("El calendario necesita la hoja de Google configurada");
+  const p = id ? programadas.find(x=>x.id===id) : null; progEditando = p ? p.id : null;
+  document.getElementById("progTit").textContent = p ? "✏️ Editar limpieza" : "📅 Programar limpieza";
+  const nombres = personas.map(x=>x.nombre); if(p && !nombres.includes(p.persona)) nombres.push(p.persona);
+  const sel = document.getElementById("progPersona");
+  sel.innerHTML = nombres.map(n=>`<option>${esc(n)}</option>`).join("");
+  sel.value = p ? p.persona : (nombres[0]||"");
+  document.getElementById("progFecha").value = p ? p.fecha : (hoyServ||hoy());
+  document.getElementById("progHora").value = p ? p.hora : "10:00";
+  document.getElementById("progNota").value = p ? p.nota : "";
+  document.getElementById("modalProg").classList.add("on");
+}
+function cerrarProg(){ document.getElementById("modalProg").classList.remove("on"); }
+async function guardarProg(){
+  const prog = {id:progEditando||"", fecha:val("progFecha"), hora:val("progHora"), persona:val("progPersona"), nota:val("progNota").trim()};
+  if(!prog.fecha || !prog.persona) return toast("Elige la fecha y la persona");
+  const editando = !!progEditando;
+  const b = document.getElementById("progOk"); b.disabled = true; b.textContent = "Guardando…";
+  try{
+    const j = await llamar({accion:"programar", pin, programada:prog});
+    if(!j.ok) return toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"No se pudo guardar"));
+    programadas = j.programadas||programadas; cerrarProg(); secAbiertas.add("cal"); pintarPanel();
+    modal(editando ? "Limpieza actualizada" : "📅 Limpieza programada",
+      `¿Avisar a ${prog.persona} por WhatsApp con su calendario de limpiezas?`, ()=>whatsProg(j.id, !editando), "📲 Enviar WhatsApp");
+  }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); }
+  finally{ b.disabled = false; b.textContent = "Guardar"; }
+}
+function borrarProg(id){
+  const p = programadas.find(x=>x.id===id); if(!p) return;
+  modal("¿Borrar esta limpieza programada?", `${fechaLarga(p.fecha)}${p.hora?" · "+p.hora:""} · ${p.persona}`, async ()=>{
+    try{ const j = await llamar({accion:"borrarProgramada", pin, id});
+      if(!j.ok) return toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"No se pudo borrar"));
+      programadas = j.programadas||[]; pintarPanel(); toast("Limpieza borrada");
+    }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); }
+  }, "Borrar");
+}
+function whatsProg(id, nueva){
+  const p = programadas.find(x=>x.id===id); if(!p) return;
+  const prox = proximas(p.persona);
+  let t = `🧹 *${nueva?"Nueva limpieza programada":"Limpieza programada"} – Depto Tucumán*\n\nHola ${p.persona} 👋\n📅 ${fechaLarga(p.fecha)}${p.hora?" a las "+p.hora:""}${p.nota?"\n📝 "+p.nota:""}`;
+  if(prox.length) t += `\n\n*Tu calendario de limpiezas:*\n` + prox.map(x=>`• ${fechaLarga(x.fecha)}${x.hora?" – "+x.hora:""}${x.nota?" ("+x.nota+")":""}`).join("\n");
+  t += `\n\nSi no puedes algún día, avísame. ¡Gracias!`;
+  location.href = `https://wa.me/${telDe(p.persona)}?text=` + encodeURIComponent(t);
+}
+function abrirPersonas(){
+  if(!SCRIPT_URL) return toast("Necesita la hoja de Google configurada");
+  document.getElementById("persLista").innerHTML = "";
+  (personas.length ? personas : [{nombre:"",telefono:""}]).forEach(filaPersona);
+  document.getElementById("modalPers").classList.add("on");
+}
+function filaPersona(p){
+  p = p||{nombre:"",telefono:""};
+  const d = document.createElement("div"); d.className = "fila persFila"; d.style.marginBottom = "8px";
+  d.innerHTML = `<input type="text" class="pNom" placeholder="Nombre" value="${esc(p.nombre)}"><input type="tel" class="pTel" inputmode="tel" placeholder="5493815551234" value="${esc(p.telefono)}">`;
+  document.getElementById("persLista").appendChild(d);
+}
+async function guardarPersonas(){
+  const lista = [...document.querySelectorAll(".persFila")].map(f=>({nombre:f.querySelector(".pNom").value.trim(), telefono:f.querySelector(".pTel").value.replace(/\D/g,"")})).filter(p=>p.nombre);
+  const b = document.getElementById("persOk"); b.disabled = true; b.textContent = "Guardando…";
+  try{
+    const j = await llamar({accion:"personas", pin, personas:lista});
+    if(!j.ok) return toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"No se pudo guardar"));
+    personas = j.personas||lista; document.getElementById("modalPers").classList.remove("on"); pintarPanel(); toast("👥 Personas guardadas");
+  }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); }
+  finally{ b.disabled = false; b.textContent = "Guardar"; }
+}
+
+/* ====== PRÓXIMAS LIMPIEZAS (vista de las chicas) ====== */
+async function cargarAgenda(){
+  if(!SCRIPT_URL) return;
+  try{
+    const j = await llamar({accion:"agenda"}); if(!j.ok) return;
+    const extra = (j.personas||[]).filter(n=>!RESPONSABLES.includes(n));
+    if(extra.length){ RESPONSABLES.splice(RESPONSABLES.length-1, 0, ...extra); initCampos(); }
+    const ps = (j.programadas||[]).slice(0,5), el = document.getElementById("agendaChicas");
+    el.innerHTML = ps.length ? `<div class="card agenda"><div class="sub" style="padding-top:12px">📅 Próximas limpiezas</div>${ps.map(p=>`<div class="fila2"><span class="izq"><b>${fechaLarga(p.fecha)}${p.hora?" · "+esc(p.hora):""}</b>${p.fecha===j.hoy?` <span class="tag nopag">Hoy</span>`:""}<small>👤 ${esc(p.persona)}${p.nota?" · 📝 "+esc(p.nota):""}</small></span></div>`).join("")}</div>` : "";
+  }catch(e){}
+}
+
 /* ====== UI ====== */
 let tToast;
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("on");clearTimeout(tToast);tToast=setTimeout(()=>t.classList.remove("on"),3200);}
@@ -867,7 +1071,7 @@ if(b && b.hechos){
   Object.values(st.fotos).forEach(fs=>fs.forEach(f=>{ if(f.estado==="subiendo") f.estado = f.local ? "error" : "ok"; }));
 }
 if(!SCRIPT_URL) document.getElementById("avisoDemo").classList.remove("oculto");
-initCampos(); pintar();
+initCampos(); pintar(); cargarAgenda();
 enviarPendientes();
 window.addEventListener("online", enviarPendientes);
 </script>
