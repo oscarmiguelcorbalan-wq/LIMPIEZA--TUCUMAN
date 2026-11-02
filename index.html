@@ -127,6 +127,7 @@
   .btnMini.rojo{border-color:#dc2626;color:#dc2626}
   .der.acc{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .compPrev img{display:block;max-width:100%;max-height:220px;border-radius:10px;margin-top:10px}
+  .avisoEnvio{margin:0 14px 10px;border:1px dashed var(--naranja);border-radius:12px;background:#fff7ed}
   .agenda .fila2{padding:10px 14px}
 </style>
 </head>
@@ -627,7 +628,8 @@ function fotosDe(r){
 }
 
 const LS_PIN = "tucuman_pin_prop";
-let pin = null, registros = [], precioActual = PRECIO_DEFECTO, programadas = [], personas = [], hoyServ = "";
+let pin = null, registros = [], precioActual = PRECIO_DEFECTO, programadas = [], personas = [], hoyServ = "", envios = [], enviosEnHoja = true;
+const LS_ENVIOS = "tucuman_envios_local";
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 function pesos(n){ return "$ " + Math.round(n||0).toLocaleString("es-AR"); }
 async function llamar(datos){
@@ -658,7 +660,7 @@ async function cargarDatos(p){
     const j = await llamar({accion:"historial", pin:p});
     if(!j.ok){ toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"Error")); if(j.error==="pin"){ try{localStorage.removeItem(LS_PIN);}catch(e){} } return false; }
     registros = j.registros||[]; precioActual = Number(j.precio)||PRECIO_DEFECTO;
-    programadas = j.programadas||[]; personas = j.personas||[]; hoyServ = j.hoy||""; return true;
+    programadas = j.programadas||[]; personas = j.personas||[]; hoyServ = j.hoy||""; await cargarEnvios(p); return true;
   }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); return false; }
 }
 async function mostrarPanel(yaCargado){
@@ -960,17 +962,19 @@ function htmlCalendario(){
   const h = hoyServ||hoy(), prox = proximas();
   const pasadas = programadas.filter(p=>p.fecha<h).sort((a,b)=>(b.fecha+b.hora).localeCompare(a.fecha+a.hora)).slice(0,5);
   let x = `<div class="acciones" style="padding-top:12px"><button class="btn" onclick="abrirProg()">＋ Programar limpieza</button><button class="btn sec2" onclick="abrirPersonas()">👥 Personas</button></div>`;
+  x += htmlPendientesEnvio();
   x += prox.length ? prox.map(p=>filaProg(p,true)).join("") : `<div class="sinDatos">No hay limpiezas programadas.</div>`;
   if(pasadas.length) x += `<div class="sub" style="padding-top:14px">Programadas anteriores</div>` + pasadas.map(p=>filaProg(p,false)).join("");
+  x += htmlRegistroEnvios();
   return x;
 }
 function filaProg(p, futura){
   const h = hoyServ||hoy(), tel = telDe(p.persona), id = JSON.stringify(p.id);
-  const estado = futura ? (p.fecha===h ? ` <span class="tag nopag">Hoy</span>` : "")
+  const estado = futura ? (p.fecha===h ? ` <span class="tag nopag">Hoy</span>` : "") + tagEnvio(p)
                         : (hecha(p) ? ` <span class="tag ok">✓ Hecha</span>` : ` <span class="tag no">Sin registrar</span>`);
   return `<div class="fila2"><span class="izq"><b>${fechaLarga(p.fecha)}${p.hora?" · "+esc(p.hora):""}</b>${estado}
       <small>👤 ${esc(p.persona)}${tel?"":` · <span style="color:var(--naranja)">sin teléfono</span>`}</small>${p.nota?`<small>📝 ${esc(p.nota)}</small>`:""}</span>
-    <span class="der acc">${futura?`<button class="btnMini" title="Enviar por WhatsApp" onclick='whatsProg(${id})'>📲</button>`:""}<button class="btnMini" title="Editar" onclick='abrirProg(${id})'>✏️</button><button class="btnMini rojo" title="Borrar" onclick='borrarProg(${id})'>🗑️</button></span></div>`;
+    <span class="der acc">${futura?`<button class="btnMini" title="Enviar por WhatsApp" onclick='enviarCalendario(${JSON.stringify(p.persona)})'>📲</button>`:""}<button class="btnMini" title="Editar" onclick='abrirProg(${id})'>✏️</button><button class="btnMini rojo" title="Borrar" onclick='borrarProg(${id})'>🗑️</button></span></div>`;
 }
 function abrirProg(id){
   if(!SCRIPT_URL) return toast("El calendario necesita la hoja de Google configurada");
@@ -995,8 +999,8 @@ async function guardarProg(){
     const j = await llamar({accion:"programar", pin, programada:prog});
     if(!j.ok) return toast(j.error==="pin" ? "PIN incorrecto" : (j.error||"No se pudo guardar"));
     programadas = j.programadas||programadas; cerrarProg(); secAbiertas.add("cal"); pintarPanel();
-    modal(editando ? "Limpieza actualizada" : "📅 Limpieza programada",
-      `¿Avisar a ${prog.persona} por WhatsApp con su calendario de limpiezas?`, ()=>whatsProg(j.id, !editando), "📲 Enviar WhatsApp");
+    const n = pendientesDe(prog.persona).total;
+    toast((editando ? "Limpieza actualizada" : "📅 Limpieza programada") + (n ? ` · ${n} pendiente${n>1?"s":""} de enviar a ${prog.persona}` : ""));
   }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); }
   finally{ b.disabled = false; b.textContent = "Guardar"; }
 }
@@ -1009,13 +1013,99 @@ function borrarProg(id){
     }catch(e){ toast("Sin conexión. Inténtalo de nuevo."); }
   }, "Borrar");
 }
-function whatsProg(id, nueva){
-  const p = programadas.find(x=>x.id===id); if(!p) return;
-  const prox = proximas(p.persona);
-  let t = `🧹 *${nueva?"Nueva limpieza programada":"Limpieza programada"} – Depto Tucumán*\n\nHola ${p.persona} 👋\n📅 ${fechaLarga(p.fecha)}${p.hora?" a las "+p.hora:""}${p.nota?"\n📝 "+p.nota:""}`;
-  if(prox.length) t += `\n\n*Tu calendario de limpiezas:*\n` + prox.map(x=>`• ${fechaLarga(x.fecha)}${x.hora?" – "+x.hora:""}${x.nota?" ("+x.nota+")":""}`).join("\n");
+/* ====== ENVÍO AGRUPADO + REGISTRO DE ENVÍOS ======
+   Cada envío por WhatsApp queda anotado (hoja "Envios" de Google, o en este teléfono
+   si el Apps Script todavía no tiene las acciones "envios"/"marcarEnviadas"). */
+function firmaProg(p){ return [p.fecha, p.hora||"", p.nota||"", p.persona].join("|"); }
+function datosEnvio(e){ if(e.items) return e; try{ return Object.assign({}, e, JSON.parse(e.datos||"{}")); }catch(x){ return Object.assign({items:[],canceladas:[]}, e); } }
+function enviosOrdenados(){ return envios.map(datosEnvio).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))); }
+function ultimoEnvioDe(id){ return enviosOrdenados().find(e=>(e.items||[]).some(it=>String(it.id)===String(id))); }
+function estadoEnvio(p){
+  const e = ultimoEnvioDe(p.id); if(!e) return {est:"sin"};
+  const it = e.items.find(x=>String(x.id)===String(p.id));
+  return it.firma===firmaProg(p) ? {est:"ok", fecha:e.fecha} : {est:"mod", fecha:e.fecha};
+}
+function fechaHoraEnvio(f){ const d = new Date(f); return isNaN(d) ? String(f) : d.toLocaleDateString("es-ES",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}); }
+function tagEnvio(p){
+  const e = estadoEnvio(p);
+  if(e.est==="ok")  return ` <span class="tag ok">✓ Enviada ${fechaHoraEnvio(e.fecha)}</span>`;
+  if(e.est==="mod") return ` <span class="tag nopag">✏️ Cambiada, sin reenviar</span>`;
+  return ` <span class="tag no">✉️ Sin enviar</span>`;
+}
+/* Limpiezas ya avisadas que se borraron y aún no se comunicó la cancelación */
+function canceladasDe(persona){
+  const h = hoyServ||hoy(), vivas = new Set(programadas.map(p=>String(p.id))), avisadas = new Set(), res = [];
+  enviosOrdenados().filter(e=>e.persona===persona).forEach(e=>(e.canceladas||[]).forEach(c=>avisadas.add(String(c.id))));
+  enviosOrdenados().filter(e=>e.persona===persona).forEach(e=>(e.items||[]).forEach(it=>{
+    const k = String(it.id);
+    if(!vivas.has(k) && !avisadas.has(k) && it.fecha>=h && !res.some(r=>String(r.id)===k)) res.push(it);
+  }));
+  return res;
+}
+function pendientesDe(persona){
+  const nuevas = [], cambiadas = [];
+  proximas(persona).forEach(p=>{ const e = estadoEnvio(p).est; if(e==="sin") nuevas.push(p); else if(e==="mod") cambiadas.push(p); });
+  const canceladas = canceladasDe(persona);
+  return {nuevas, cambiadas, canceladas, total: nuevas.length+cambiadas.length+canceladas.length};
+}
+function htmlPendientesEnvio(){
+  const nombres = [...new Set(proximas().map(p=>p.persona).concat(enviosOrdenados().map(e=>e.persona)))];
+  const filas = nombres.map(n=>[n, pendientesDe(n)]).filter(([n,pd])=>pd.total);
+  if(!filas.length) return "";
+  return `<div class="avisoEnvio">${filas.map(([n,pd])=>{
+      const partes = [pd.nuevas.length&&`${pd.nuevas.length} nueva${pd.nuevas.length>1?"s":""}`, pd.cambiadas.length&&`${pd.cambiadas.length} cambiada${pd.cambiadas.length>1?"s":""}`, pd.canceladas.length&&`${pd.canceladas.length} cancelada${pd.canceladas.length>1?"s":""}`].filter(Boolean).join(", ");
+      return `<div class="fila2"><span class="izq"><b>✉️ ${esc(n)}: pendiente de enviar</b><small>${partes}${telDe(n)?"":` · <span style="color:var(--naranja)">sin teléfono</span>`}</small></span>
+        <span class="der"><button class="btn" style="padding:9px 12px;font-size:14px" onclick='enviarCalendario(${JSON.stringify(n)})'>📲 Enviar todo</button></span></div>`;
+    }).join("")}</div>`
+    + (enviosEnHoja ? "" : `<div class="sinDatos" style="font-size:13px">⚠️ El registro de envíos se guarda solo en este teléfono hasta que se actualice el Apps Script.</div>`);
+}
+function htmlRegistroEnvios(){
+  const es = enviosOrdenados().slice(0,8); if(!es.length) return "";
+  return `<div class="sub" style="padding-top:14px">📨 Registro de envíos</div>` + es.map(e=>{
+    const n = (e.items||[]).length, c = (e.canceladas||[]).length;
+    return `<div class="fila2"><span class="izq"><b>${fechaHoraEnvio(e.fecha)} · ${esc(e.persona)}</b><small>${n} limpieza${n!==1?"s":""} en el calendario${c?` · ${c} cancelada${c>1?"s":""}`:""}</small></span><span class="der"><span class="tag ok">✓ Enviado</span></span></div>`;
+  }).join("");
+}
+function linea(x){ return `• ${fechaLarga(x.fecha)}${x.hora?" – "+x.hora:""}${x.nota?" ("+x.nota+")":""}`; }
+async function enviarCalendario(persona){
+  const prox = proximas(persona), pd = pendientesDe(persona);
+  if(!prox.length && !pd.canceladas.length) return toast(`${persona} no tiene limpiezas próximas`);
+  let t = `🧹 *Limpiezas – Depto Tucumán*\n\nHola ${persona} 👋`;
+  if(pd.nuevas.length)     t += `\n\n🆕 *Nuevas:*\n` + pd.nuevas.map(linea).join("\n");
+  if(pd.cambiadas.length)  t += `\n\n✏️ *Cambiadas:*\n` + pd.cambiadas.map(linea).join("\n");
+  if(pd.canceladas.length) t += `\n\n❌ *Canceladas (ya no hace falta ir):*\n` + pd.canceladas.map(linea).join("\n");
+  if(prox.length) t += `\n\n📅 *Tu calendario completo:*\n` + prox.map(linea).join("\n");
   t += `\n\nSi no puedes algún día, avísame. ¡Gracias!`;
-  location.href = `https://wa.me/${telDe(p.persona)}?text=` + encodeURIComponent(t);
+  const envio = {fecha:new Date().toISOString(), persona,
+    items: prox.map(p=>({id:p.id, fecha:p.fecha, hora:p.hora||"", nota:p.nota||"", firma:firmaProg(p)})),
+    canceladas: pd.canceladas.map(c=>({id:c.id, fecha:c.fecha, hora:c.hora||"", nota:c.nota||""}))};
+  await registrarEnvio(envio);
+  location.href = `https://wa.me/${telDe(persona)}?text=` + encodeURIComponent(t);
+}
+async function cargarEnvios(p){
+  envios = ls(LS_ENVIOS)||[];
+  if(!SCRIPT_URL) { enviosEnHoja = false; return; }
+  try{
+    const j = await llamar({accion:"envios", pin:p});
+    if(j.ok && Array.isArray(j.envios)){ envios = j.envios.concat(envios.filter(e=>e.local)); enviosEnHoja = true; subirEnviosLocales(p); }
+    else enviosEnHoja = false;
+  }catch(e){ enviosEnHoja = false; }
+}
+async function registrarEnvio(envio){
+  if(SCRIPT_URL && enviosEnHoja){
+    try{ const j = await llamar({accion:"marcarEnviadas", pin, envio});
+      if(j.ok){ envios = (j.envios||envios.concat([envio])).concat(envios.filter(e=>e.local)); pintarPanel(); return; } }catch(e){}
+  }
+  envio.local = true; envios.push(envio);
+  ls(LS_ENVIOS, envios.filter(e=>e.local)); pintarPanel();
+}
+async function subirEnviosLocales(p){
+  const locales = envios.filter(e=>e.local); if(!locales.length) return;
+  for(const e of locales){
+    try{ const c = Object.assign({}, e); delete c.local;
+      const j = await llamar({accion:"marcarEnviadas", pin:p, envio:c}); if(!j.ok) return; e.local = false; }catch(x){ return; }
+  }
+  envios.forEach(e=>delete e.local); ls(LS_ENVIOS, []);
 }
 function abrirPersonas(){
   if(!SCRIPT_URL) return toast("Necesita la hoja de Google configurada");
